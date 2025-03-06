@@ -1,0 +1,78 @@
+Senarai Sambungan
+Komponen	              ESP8266 (NodeMCU) Pin
+Moisture Sensor (AO)	      A0
+Moisture Sensor (VCC)	    3.3V
+Moisture Sensor (GND)    	  GND
+DHT11 (Data)	              D4
+DHT11 (VCC)	              3.3V
+DHT11 (GND)	              GND
+Relay (IN)	              D5
+Relay (VCC)	              5V
+Relay (GND)	              GND
+Pam Air (Positif)	Relay NO (Normally Open)
+Pam Air (Negatif)	GND
+
+
+KODING
+
+#include <ESP8266WiFi.h>
+#include <DHT.h>
+#include <PubSubClient.h>
+
+// Konfigurasi WiFi
+const char* ssid = "WIFI_SSID";
+const char* password = "WIFI_PASSWORD";
+
+// Konfigurasi ThingsBoard
+const char* thingsboardServer = "demo.thingsboard.io"; // Gantikan dengan server ThingsBoard anda
+const char* accessToken = "YOUR_ACCESS_TOKEN";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+#define DHTPIN D4
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+#define MOISTURE_PIN A0
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi");
+
+  client.setServer(thingsboardServer, 1883);
+
+  dht.begin();
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  int moisture = analogRead(MOISTURE_PIN);
+
+  String payload = "{\"temperature\": " + String(temperature) + ", \"humidity\": " + String(humidity) + ", \"moisture\": " + String(moisture) + "}";
+
+  client.publish("v1/devices/me/telemetry", payload.c_str());
+  Serial.println("Data Sent: " + payload);
+  
+  delay(5000);
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect("ESP8266_Client", accessToken, NULL)) {
+      Serial.println("Connected to ThingsBoard");
+    } else {
+      delay(5000);
+    }
+  }
+}
