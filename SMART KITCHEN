@@ -1,0 +1,132 @@
+Smart Kitchen: ESP8266, ThingsBoard, MQ2 Sensor, Buzzer, Relay, DHT11
+
+Projek Smart Kitchen ini bertujuan untuk meningkatkan keselamatan dapur dengan mengesan kebocoran gas, memantau suhu dan kelembapan dapur, serta mengambil tindakan automatik seperti membunyikan buzzer dan mengaktifkan kipas ekzos melalui relay.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1. Komponen dan Fungsi
+ESP8266 (NodeMCU)	Penghantaran data ke ThingsBoard dan kawalan komponen lain.
+MQ2 Sensor	Mengesan gas mudah terbakar (LPG, CO, Smoke).
+DHT11 Sensor	Mengukur suhu dan kelembapan dapur.
+Buzzer	Mengeluarkan bunyi amaran jika gas atau suhu melebihi had.
+Relay	Mengawal kipas ekzos untuk membuang gas beracun.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sambungan Litar Smart Kitchen
+Komponen	            ESP8266 (NodeMCU) Pin
+MQ2 Sensor Output	    A0
+MQ2 Sensor VCC	      3.3V
+MQ2 Sensor GND	      GND
+DHT11 Sensor Data	    D4
+DHT11 Sensor VCC	    3.3V
+DHT11 Sensor GND	    GND
+Buzzer (+)	          D6
+Buzzer (-)	          GND
+Relay IN	            D5
+Relay VCC	            3.3V / 5V
+Relay GND	             GND
+Kipas Ekzos Positif	Relay NO
+Kipas Ekzos Negatif	GND
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+KODING
+
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <DHT.h>
+
+#define MQ2_PIN A0
+#define DHTPIN D4
+#define DHTTYPE DHT11
+#define BUZZER_PIN D6
+#define RELAY_PIN D5
+
+const char* ssid = "WIFI_SSID";
+const char* password = "WIFI_PASSWORD";
+const char* thingsboardServer = "demo.thingsboard.io"; 
+const char* accessToken = "YOUR_ACCESS_TOKEN";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi");
+
+  client.setServer(thingsboardServer, 1883);
+
+  pinMode(MQ2_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  
+  dht.begin();
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+
+  int gasLevel = analogRead(MQ2_PIN);
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  Serial.print("Gas Level: ");
+  Serial.println(gasLevel);
+  Serial.print("Temperature: ");
+  Serial.println(temperature);
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+
+  if (gasLevel > 500) { // Nilai ambang bahaya
+    digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(RELAY_PIN, HIGH);
+  } else {
+    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(RELAY_PIN, LOW);
+  }
+
+  String payload = "{\"gas_level\": " + String(gasLevel) + 
+                    ", \"temperature\": " + String(temperature) + 
+                    ", \"humidity\": " + String(humidity) + "}";
+
+  client.publish("v1/devices/me/telemetry", payload.c_str());
+  
+  delay(5000);
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect("ESP8266_Client", accessToken, NULL)) {
+      Serial.println("Connected to ThingsBoard");
+    } else {
+      delay(5000);
+    }
+  }
+}
+
+___________________________________________________________________
+THINGBOARD SETTING
+
+1. Cipta Dashboard dalam ThingsBoard
+Pergi ke "Dashboards" → Klik "+" (Add New Dashboard).
+Masukkan Nama Dashboard (contoh: Smart Kitchen).
+Klik "Save".
+
+2. Tambah Widget untuk Memaparkan Data
+Buka Dashboard → Klik "Edit Mode".
+Klik "+" (Add New Widget).
+Pilih kategori "Charts" atau "Latest Values" untuk paparan nilai.
+Tambah "Gas Level", "Temperature", dan "Humidity" ke widget.
+Pilih peranti yang menghantar data (contoh: Smart_Kitchen).
+Klik "Save".
+
+3. Tambah Automasi (Rule Engine) untuk Notifikasi
+Pergi ke Rule Chains → Klik "+" (Add New Rule Chain).
+Cipta peraturan:
+Jika Gas Level > 500, hantar notifikasi ke pengguna.
+Jika Temperature > 50°C, hantar amaran keselamatan.
+Simpan dan aktifkan Rule Chain.
