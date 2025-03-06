@@ -1,0 +1,125 @@
+Projek Smart Living Room: Kawalan Automatik Menggunakan ESP8266, ThingsBoard, DHT11, dan Sensor Cahaya
+Projek Smart Living Room ini menggunakan ESP8266 untuk memantau suhu, 
+kelembapan, dan tahap pencahayaan serta mengawal lampu secara automatik 
+berdasarkan data sensor. Semua data dihantar ke ThingsBoard untuk pemantauan jarak jauh.
+__________________________________________________________________________________
+1. Komponen Diperlukan
+ESP8266 (NodeMCU)	Menghantar data ke ThingsBoard dan mengawal sistem.
+DHT11 Sensor	Mengukur suhu dan kelembapan ruang tamu.
+LDR (Light Dependent Resistor)	Mengesan tahap pencahayaan di dalam bilik.
+Relay Module	Menghidupkan dan mematikan lampu secara automatik.
+
+__________________________________________________________________________________
+SAMBUNGAN LITAR
+Komponen	          ESP8266 (NodeMCU) Pin
+DHT11 Sensor Data   D4
+DHT11 Sensor VCC	  3.3V
+DHT11 Sensor GND	  GND
+LDR Sensor Output	  A0
+LDR Sensor VCC	    3.3V
+LDR Sensor GND	    GND
+Relay IN	          D5
+Relay VCC	          3.3V / 5V
+Relay GND	          GND
+Lampu Positif	Relay NO
+Lampu Negatif	GND
+
+__________________________________________________________________________________
+
+KODING
+
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <DHT.h>
+
+#define DHTPIN D4
+#define DHTTYPE DHT11
+#define LDR_PIN A0
+#define RELAY_PIN D5
+
+const char* ssid = "WIFI_SSID";
+const char* password = "WIFI_PASSWORD";
+const char* thingsboardServer = "demo.thingsboard.io"; 
+const char* accessToken = "YOUR_ACCESS_TOKEN";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi");
+
+  client.setServer(thingsboardServer, 1883);
+  dht.begin();
+  pinMode(RELAY_PIN, OUTPUT);
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  int lightLevel = analogRead(LDR_PIN);
+
+  Serial.print("Temperature: ");
+  Serial.println(temperature);
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+  Serial.print("Light Level: ");
+  Serial.println(lightLevel);
+
+  if (lightLevel < 500) { // Nilai ambang untuk bilik gelap
+    digitalWrite(RELAY_PIN, HIGH);  // Hidupkan lampu
+  } else {
+    digitalWrite(RELAY_PIN, LOW);   // Matikan lampu
+  }
+
+  String payload = "{\"temperature\": " + String(temperature) + 
+                    ", \"humidity\": " + String(humidity) + 
+                    ", \"light_level\": " + String(lightLevel) + "}";
+
+  client.publish("v1/devices/me/telemetry", payload.c_str());
+
+  delay(5000);
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect("ESP8266_Client", accessToken, NULL)) {
+      Serial.println("Connected to ThingsBoard");
+    } else {
+      delay(5000);
+    }
+  }
+}
+__________________________________________________________________________________
+Setting ThingsBoard
+Cipta Peranti (Device)
+
+1. Pergi ke Devices → Klik "+" (Add New Device).
+Masukkan Nama Peranti (Smart_Living_Room).
+Pilih Device Type → "Default".
+Klik Save.
+Dapatkan Access Token
+
+2. Klik peranti Smart_Living_Room.
+Pergi ke tab "Credentials".
+Salin "Access Token" dan letakkan dalam kod ESP8266.
+Bina Dashboard
+
+3. Pergi ke Dashboards → Klik "+" (Add New Dashboard).
+Masukkan Nama Dashboard (Smart Living Room).
+Tambahkan Widget:
+Temperature & Humidity (Memaparkan data suhu dan kelembapan).
+Light Level (Menunjukkan tahap cahaya).
+Lamp Status (Menunjukkan status lampu ON/OFF).
+Manual Control Button (Untuk menyalakan/mematikan lampu secara manual).
